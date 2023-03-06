@@ -375,7 +375,18 @@ func main() {
 			Mutation: MutationType,
 		},
 	)
+	// // Read the JSON file
+	// jsonFile, err := http.Get("http://localhost:8080/graphql")
+	// if err != nil {
+	// 	log.Fatal(err)
+	// }
+	// defer jsonFile.Body.Close()
 
+	// // Parse the JSON file into StandupRecord array
+	// err = json.NewDecoder(jsonFile.Body).Decode(&standupRecords)
+	// if err != nil {
+	// 	log.Fatal(err)
+	//	}
 	// Register a handler for the "/graphql" endpoint
 	http.HandleFunc("/graphql", func(w http.ResponseWriter, r *http.Request) {
 		result := graphql.Do(graphql.Params{
@@ -410,6 +421,22 @@ func main() {
 
 	// Get a handle for your collection
 	collection := client.Database("myDatabase").Collection("myCollection")
+	// Insert the data into the collection
+	for _, record := range standupRecords {
+		doc := bson.M{
+			"id":           record.ID,
+			"title":        record.Title,
+			"date":         record.Date,
+			"timing":       record.Timing,
+			"participants": record.Participants,
+			"updates":      record.Updates,
+			"email":        record.Email,
+		}
+		_, err = collection.InsertOne(context.Background(), doc)
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
 
 	// Query the collection
 	cur, err := collection.Find(context.Background(), bson.D{})
@@ -428,7 +455,7 @@ func main() {
 
 	// Run an example mutation
 	runExampleMutation()
-
+	fmt.Println("Data inserted successfully")
 	// Start the HTTP server
 	fmt.Println("Server is running on port 8080")
 	if err := http.ListenAndServe(":8080", nil); err != nil {

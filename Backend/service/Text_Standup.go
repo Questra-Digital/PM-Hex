@@ -3,7 +3,9 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"errors"
+	"strings"
+
+	//"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -17,13 +19,13 @@ import (
 
 // StandupRecord struct
 type StandupRecord struct {
-	ID           string `json:"id"`
-	Title        string `json:"title"`
-	Date         string `json:"date" bson:"date"`
-	Timing       string `json:"timing" bson:"timing"`
-	Participants string `json:"participants" bson:"participants"`
-	Updates      string `json:"updates" bson:"updates"`
-	Email        string `json:"email" bson:"email"`
+	ID           string   `json:"id"`
+	Title        string   `json:"title"`
+	Date         string   `json:"date"`
+	Timing       string   `json:"timing"`
+	Participants string   `json:"participants" bson:"participants"`
+	Updates      []string `json:"updates" bson:"updates"`
+	Email        string   `json:"email" bson:"email"`
 }
 
 var standupRecords []StandupRecord
@@ -94,7 +96,7 @@ var QueryType = graphql.NewObject(
 					date, dateOK := p.Args["date"].(string)
 					timing, timingOK := p.Args["timing"].(string)
 					participants, participantsOK := p.Args["participants"].(string)
-					updates, updatesOK := p.Args["updates"].(string)
+					updates, updatesOK := p.Args["updates"].([]string)
 					email, emailOK := p.Args["email"].(string)
 
 					if idOK {
@@ -134,7 +136,14 @@ var QueryType = graphql.NewObject(
 						return []StandupRecord{}, nil
 					} else if updatesOK {
 						for _, record := range standupRecords {
-							if record.Updates == updates {
+							found := false
+							for _, update := range record.Updates {
+								if update == updates[0] { // Assuming you only want to match the first update in the input
+									found = true
+									break
+								}
+							}
+							if found {
 								return []StandupRecord{record}, nil
 							}
 						}
@@ -176,7 +185,7 @@ var MutationType = graphql.NewObject(
 						Type: graphql.NewNonNull(graphql.String),
 					},
 					"updates": &graphql.ArgumentConfig{
-						Type: graphql.NewNonNull(graphql.String),
+						Type: graphql.NewList(graphql.String),
 					},
 					"email": &graphql.ArgumentConfig{
 						Type: graphql.NewNonNull(graphql.String),
@@ -185,7 +194,7 @@ var MutationType = graphql.NewObject(
 				Resolve: func(p graphql.ResolveParams) (interface{}, error) {
 					title, _ := p.Args["title"].(string)
 					participants, _ := p.Args["participants"].(string)
-					updates, _ := p.Args["updates"].(string)
+					updates, _ := p.Args["updates"].([]string)
 					email, _ := p.Args["email"].(string)
 					timing := time.Now().Format("3:04 PM")
 					date := time.Now().Format("Jan 2, 2006")
@@ -205,27 +214,88 @@ var MutationType = graphql.NewObject(
 					return newRecord, nil
 				},
 			},
-			"deleteStandupRecord": &graphql.Field{
+			"updateStandupRecord": &graphql.Field{
 				Type: StandupRecordType,
 				Args: graphql.FieldConfigArgument{
 					"id": &graphql.ArgumentConfig{
 						Type: graphql.NewNonNull(graphql.String),
 					},
+					"title": &graphql.ArgumentConfig{
+						Type: graphql.String,
+					},
+					"date": &graphql.ArgumentConfig{
+						Type: graphql.String,
+					},
+					"timing": &graphql.ArgumentConfig{
+						Type: graphql.String,
+					},
+					"participants": &graphql.ArgumentConfig{
+						Type: graphql.String,
+					},
+					"updates": &graphql.ArgumentConfig{
+						Type: graphql.String,
+					},
+					"email": &graphql.ArgumentConfig{
+						Type: graphql.String,
+					},
 				},
 				Resolve: func(params graphql.ResolveParams) (interface{}, error) {
+					// Get the ID of the record to be edited
 					id := params.Args["id"].(string)
+
+					// Find the record with the specified ID
 					for i, record := range standupRecords {
 						if record.ID == id {
-							// remove the record from the slice
-							standupRecords = append(standupRecords[:i], standupRecords[i+1:]...)
-							return record, nil
+							// Update the fields of the record if they are present in the mutation arguments
+							if title, ok := params.Args["title"].(string); ok {
+								standupRecords[i].Title = title
+							}
+							if date, ok := params.Args["date"].(string); ok {
+								standupRecords[i].Date = date
+							}
+							if timing, ok := params.Args["timing"].(string); ok {
+								standupRecords[i].Timing = timing
+							}
+							if participants, ok := params.Args["participants"].(string); ok {
+								standupRecords[i].Participants = participants
+							}
+							if updates, ok := params.Args["updates"].(string); ok {
+								standupRecords[i].Updates = strings.Split(updates, ",")
+							}
+							if email, ok := params.Args["email"].(string); ok {
+								standupRecords[i].Email = email
+							}
+							return standupRecords[i], nil
 						}
 					}
-					return nil, errors.New(fmt.Sprintf("Could not find StandupRecord with id %s", id))
+
+					// Return an error if the record with the specified ID was not found
+					return nil, fmt.Errorf("standup record with ID %s not found", id)
 				},
 			},
 		},
 	},
+
+	// "deleteStandupRecord": &graphql.Field{
+	// 	Type: StandupRecordType,
+	// 	Args: graphql.FieldConfigArgument{
+	// 		"id": &graphql.ArgumentConfig{
+	// 			Type: graphql.NewNonNull(graphql.String),
+	// 		},
+	// 	},
+	// 	Resolve: func(params graphql.ResolveParams) (interface{}, error) {
+	// 		id := params.Args["id"].(string)
+	// 		for i, record := range standupRecords {
+	// 			if record.ID == id {
+	// 				// remove the record from the slice
+	// 				standupRecords = append(standupRecords[:i], standupRecords[i+1:]...)
+	// 				return record, nil
+	// 			}
+	// 		}
+	// 		return nil, errors.New(fmt.Sprintf("Could not find StandupRecord with id %s", id))
+	// 	},
+	// },
+
 )
 
 // Schema defines the GraphQL schema for the API
@@ -244,7 +314,9 @@ func runExampleMutation() {
 			   participants: "Jawad, Hammad, Ayesha",
 			   email: "bsce19014@itu.edu.pk, bsce19040@itu.edu.pk",
 			   updates: "Text-based standup is done",
-			) {
+			   timing: "10:00 AM",
+               date: "2022-03-05") 
+			   {
 			   id
 			   title
 			   participants
@@ -282,7 +354,7 @@ func main() {
 			Date:         "feb 22, 2023",
 			Timing:       "5:22 p.m.",
 			Participants: " Ayesha, Hammad",
-			Updates:      "Initial Setup of meeting",
+			Updates:      []string{"Initial Setup of meeting"},
 			Email:        "ayeshaasmat26@gmail.com, malikhammad90002@gmail.com",
 		},
 		{
@@ -291,7 +363,7 @@ func main() {
 			Date:         "march 22, 2023",
 			Timing:       "6:22 p.m.",
 			Participants: "Jawad, Junaid",
-			Updates:      "Meeting record 2",
+			Updates:      []string{"Meeting record 2"},
 			Email:        "Jawad@questra.digital, Junaid12345@gmail.com ",
 		},
 	}
@@ -303,7 +375,18 @@ func main() {
 			Mutation: MutationType,
 		},
 	)
+	// // Read the JSON file
+	// jsonFile, err := http.Get("http://localhost:8080/graphql")
+	// if err != nil {
+	// 	log.Fatal(err)
+	// }
+	// defer jsonFile.Body.Close()
 
+	// // Parse the JSON file into StandupRecord array
+	// err = json.NewDecoder(jsonFile.Body).Decode(&standupRecords)
+	// if err != nil {
+	// 	log.Fatal(err)
+	//	}
 	// Register a handler for the "/graphql" endpoint
 	http.HandleFunc("/graphql", func(w http.ResponseWriter, r *http.Request) {
 		result := graphql.Do(graphql.Params{
@@ -338,6 +421,22 @@ func main() {
 
 	// Get a handle for your collection
 	collection := client.Database("myDatabase").Collection("myCollection")
+	// Insert the data into the collection
+	for _, record := range standupRecords {
+		doc := bson.M{
+			"id":           record.ID,
+			"title":        record.Title,
+			"date":         record.Date,
+			"timing":       record.Timing,
+			"participants": record.Participants,
+			"updates":      record.Updates,
+			"email":        record.Email,
+		}
+		_, err = collection.InsertOne(context.Background(), doc)
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
 
 	// Query the collection
 	cur, err := collection.Find(context.Background(), bson.D{})
@@ -356,7 +455,7 @@ func main() {
 
 	// Run an example mutation
 	runExampleMutation()
-
+	fmt.Println("Data inserted successfully")
 	// Start the HTTP server
 	fmt.Println("Server is running on port 8080")
 	if err := http.ListenAndServe(":8080", nil); err != nil {

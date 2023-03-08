@@ -20,7 +20,7 @@ class _BodyState extends State<Body> {
   List<Map<String, String>> splashData = [
     {
       "text": "Welcome to the digital scrumm assistant",
-      "image": "assets/images/splash_1.jpg"
+      "image": "assets/images/splash_1.png"
     },
     {
       "text": "Run Asynchronous Standup Meetings Instantly \n",

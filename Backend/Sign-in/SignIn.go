@@ -117,7 +117,7 @@ func main() {
 	}
 
 	// Get a handle for your collection
-	collection := client.Database("myDatabase").Collection("myCollection")
+	collection := client.Database("myDatabase").Collection("Credentials")
 	// Insert the data into the collection
 	for _, record := range users {
 		doc := bson.M{
@@ -146,14 +146,8 @@ func main() {
 		fmt.Println(result)
 	}
 
-	// Run an example mutation
-	runExampleMutation()
 	fmt.Println("Data inserted successfully")
 
 	fmt.Println("Server is running on port 8080")
 	s.ListenAndServe()
-}
-
-func runExampleMutation() {
-	panic("unimplemented")
 }

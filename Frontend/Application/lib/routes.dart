@@ -6,7 +6,6 @@ import 'package:digital_scrum_assistant/screen/otp/otp_screen.dart';
 import 'package:digital_scrum_assistant/screen/complete_profile/complete_profile.dart';
 import 'package:digital_scrum_assistant/screen/signin/signin_screen.dart';
 import 'package:digital_scrum_assistant/screen/splash/splash_screen.dart';
-
 import 'screen/signup/signup_page.dart';
 
 // We use name route
@@ -19,5 +18,5 @@ final Map<String, WidgetBuilder> routes = {
   SignUpScreen.routeName: (context) => const SignUpScreen(),
   CompleteProfileScreen.routeName: (context) => const CompleteProfileScreen(),
   OtpScreen.routeName: (context) => const OtpScreen(),
-  HomeScreen.routeName: (context) => const HomeScreen(),
+  HomeScreen.routeName: (context) => const HomeScreen()
 };

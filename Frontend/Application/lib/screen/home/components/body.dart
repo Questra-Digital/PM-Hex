@@ -33,8 +33,7 @@ class Body extends StatelessWidget {
                           Navigator.push(
                             context,
                             MaterialPageRoute(
-                                builder: (context) =>
-                                    const FeaturePlayListScreen()),
+                                builder: (context) => FeaturePlayListScreen()),
                           );
                         },
                         icon: const Icon(Icons.featured_play_list),

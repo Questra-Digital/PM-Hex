@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
@@ -138,11 +139,71 @@ func main() {
 	// Initialize the users slice
 	users = []*User{}
 	// Create a new HTTP handler for the GraphQL endpoint
-	handler := graphql.Handler{
-		Schema: &schema,
+	http.HandleFunc("/graphql", func(w http.ResponseWriter, r *http.Request) {
+		// Execute the GraphQL query and return the result
+		result := graphql.Do(graphql.Params{
+			Schema:        schema,
+			RequestString: r.URL.Query().Get("query"),
+		})
+		json.NewEncoder(w).Encode(result)
+	})
+
+	// Connect to MongoDB
+	clientOptions := options.Client().ApplyURI("mongodb://localhost:27017")
+	client, err := mongo.Connect(context.Background(), clientOptions)
+	if err != nil {
+		log.Fatal(err)
 	}
+	defer func() {
+		if err = client.Disconnect(context.Background()); err != nil {
+			log.Fatal(err)
+		}
+	}()
+
+	// Check the connection
+	err = client.Ping(context.Background(), nil)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// Get a handle for your collection
+	collection := client.Database("myDatabase").Collection("Credentials")
+	// Insert the data into the collection
+	for _, record := range users {
+		doc := bson.M{
+			"id":              record.ID,
+			"email":           record.Email,
+			"password":        record.Password,
+			"confirmpassword": record.ConfirmPassword,
+		}
+		_, err = collection.InsertOne(context.Background(), doc)
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
+	// // Create a new HTTP handler for the GraphQL endpoint
+	// handler := graphql.NewHandler(graphql.HandlerConfig{
+	// 	Schema: &schema,
+	// })
+	// Query the collection
+	cur, err := collection.Find(context.Background(), bson.D{})
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer cur.Close(context.Background())
+	for cur.Next(context.Background()) {
+		var result bson.M
+		err := cur.Decode(&result)
+		if err != nil {
+			log.Fatal(err)
+		}
+		fmt.Println(result)
+	}
+
+	fmt.Println("Data inserted successfully")
+
 	// Start the server
-	http.Handle("/graphql", &handler)
+	//http.Handle("/graphql", handler)
 	log.Println("Server started on port 8080")
 	log.Fatal(http.ListenAndServe(":8080", nil))
 }

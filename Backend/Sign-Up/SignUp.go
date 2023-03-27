@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/go-playground/validator/v10"
+	"github.com/google/uuid"
 	"github.com/graphql-go/graphql"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -17,9 +19,9 @@ import (
 
 type User struct {
 	ID              string `json:"id"`
-	Email           string `json:"email"`
-	Password        string `json:"-"`
-	ConfirmPassword string `json:"-"`
+	Email           string `json:"email" validate:"required,email"`
+	Password        string `json:"-" validate:"required,min=8"`
+	ConfirmPassword string `json:"-" validate:"required,eqfield=Password"`
 }
 
 var users []*User
@@ -35,7 +37,6 @@ var userType = graphql.NewObject(
 		},
 	},
 )
-
 var rootQuery = graphql.NewObject(
 	graphql.ObjectConfig{
 		Name: "Query",
@@ -49,7 +50,6 @@ var rootQuery = graphql.NewObject(
 		},
 	},
 )
-
 var rootMutation = graphql.NewObject(
 	graphql.ObjectConfig{
 		Name: "Mutation",
@@ -62,16 +62,26 @@ var rootMutation = graphql.NewObject(
 					},
 				},
 				Resolve: func(p graphql.ResolveParams) (interface{}, error) {
-					email := p.Args["email"].(string)
-					password := p.Args["password"].(string)
-					confirmPassword := p.Args["confirmPassword"].(string)
-
-					if password != confirmPassword {
+					// Create a new validator
+					validate := validator.New()
+					// Parse the user argument from the input parameters
+					var user User
+					err := json.Unmarshal([]byte(p.Args["user"].(string)), &user)
+					if err != nil {
+						return nil, fmt.Errorf("error parsing user argument: %s", err)
+					}
+					// Validate the user argument
+					err = validate.Struct(user)
+					if err != nil {
+						return nil, err
+					}
+					// Check if the passwords match
+					if user.Password != user.ConfirmPassword {
 						return nil, fmt.Errorf("passwords do not match")
 					}
 					// Check if the user exists and the password is correct
 					for _, user := range users {
-						if user.Email == email && user.Password == password {
+						if user.Email == user.Email && user.Password == user.Password {
 							return user, nil
 						}
 					}
@@ -95,22 +105,23 @@ var rootMutation = graphql.NewObject(
 					collection := client.Database("myDatabase").Collection("Credentials")
 
 					// Check if the email address is already in use
-					filter := bson.M{"email": email}
+					filter := bson.M{"email": user.Email}
 					err = collection.FindOne(ctx, filter).Decode(&User{})
 					if err == nil {
 						return nil, fmt.Errorf("email address already in use")
 					}
 
 					// Hash the password
-					hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+					hashedPassword, err := bcrypt.GenerateFromPassword([]byte(user.Password), bcrypt.DefaultCost)
 					if err != nil {
 						return nil, fmt.Errorf("error hashing password")
 					}
-
+					// Generate a new UUID
+					id := uuid.New().String()
 					// Create a new user
-					user := User{
-						ID:       "1",
-						Email:    email,
+					user = User{
+						ID:       id,
+						Email:    user.Email,
 						Password: string(hashedPassword),
 					}
 					// Insert the user into the database

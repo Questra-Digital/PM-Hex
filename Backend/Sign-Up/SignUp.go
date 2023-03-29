@@ -50,6 +50,7 @@ var rootQuery = graphql.NewObject(
 		},
 	},
 )
+
 var rootMutation = graphql.NewObject(
 	graphql.ObjectConfig{
 		Name: "Mutation",
@@ -80,13 +81,13 @@ var rootMutation = graphql.NewObject(
 						return nil, fmt.Errorf("passwords do not match")
 					}
 					// Check if the user exists and the password is correct
-					for _, user := range users {
-						if user.Email == user.Email && user.Password == user.Password {
-							return user, nil
+					for _, u := range users {
+						if u.Email == user.Email && bcrypt.CompareHashAndPassword([]byte(u.Password), []byte(user.Password)) == nil {
+							return u, nil
 						}
 					}
-					// Initialize the users variable
-					users := []User{}
+					// // Initialize the users variable
+					// users := []User{}
 					// Connect to the database
 					client, err := mongo.NewClient(options.Client().ApplyURI("mongodb://localhost:27017"))
 					if err != nil {
@@ -119,7 +120,7 @@ var rootMutation = graphql.NewObject(
 					// Generate a new UUID
 					id := uuid.New().String()
 					// Create a new user
-					user = User{
+					newUser := &User{
 						ID:       id,
 						Email:    user.Email,
 						Password: string(hashedPassword),
@@ -129,9 +130,8 @@ var rootMutation = graphql.NewObject(
 					if err != nil {
 						return nil, fmt.Errorf("error inserting user into database")
 					}
-
 					// Append the new user to the list of users
-					users = append(users, user)
+					users = append(users, newUser)
 
 					// Return the new user
 					return user, nil

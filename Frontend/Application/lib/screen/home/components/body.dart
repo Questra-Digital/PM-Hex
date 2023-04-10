@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:digital_scrum_assistant/screen/featureList/components/body.dart';
+import '../../../constant.dart';
 import '../../../size_config.dart';
 import 'home_header.dart';
 
@@ -22,6 +23,7 @@ class Body extends StatelessWidget {
                   Text(
                     'Digital Scrum Assistant',
                     style: TextStyle(
+                      color: kPrimaryColor,
                       fontWeight: FontWeight.bold,
                       fontSize: getProportionateScreenWidth(18),
                     ),

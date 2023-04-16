@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/http/httptest"
 	"time"
 
 	"github.com/dgrijalva/jwt-go"
@@ -82,7 +83,7 @@ func main() {
 
 				// Generate a reset token and save it to the database
 				resetToken := generateResetToken()
-				resetTokenExpiration := time.Now().Add(time.Hour * 24) // Token expires in 24 hours
+				resetTokenExpiration := time.Now().Add(time.Hour * 1) // Token expires in 24 hours
 				update := bson.M{
 					"$set": bson.M{
 						"reset_token":            resetToken,
@@ -99,10 +100,25 @@ func main() {
 				return "An email has been sent to your email address with instructions to reset your password.", nil
 			},
 		},
-
 		"users": &graphql.Field{
-			Type: graphql.NewList(userType), // user type is assumed to be defined elsewhere
+			Type: graphql.NewList(userType),
 			Resolve: func(params graphql.ResolveParams) (interface{}, error) {
+				var schema, _ = graphql.NewSchema(graphql.SchemaConfig{})
+				// Create a new ResponseWriter for testing purposes
+				w := httptest.NewRecorder()
+				// Call the authMiddleware function to authenticate the request
+				authMiddleware(handler.New(&handler.Config{
+					Schema:   &schema,
+					Pretty:   true,
+					GraphiQL: true,
+				})).ServeHTTP(w, params.Info.RootValue.(*http.Request))
+
+				// Check the status code of the response to see if authentication was successful
+				if w.Code != http.StatusOK {
+					return nil, fmt.Errorf("authentication failed")
+				}
+
+				// Call the resolver function to fetch the users from the database
 				collection := client.Database("myDatabase").Collection("Credentials")
 				cursor, err := collection.Find(context.Background(), bson.M{})
 				if err != nil {
@@ -126,7 +142,6 @@ func main() {
 			},
 		},
 	}
-
 	rootQuery := graphql.ObjectConfig{Name: "Query", Fields: fields}
 	rootMutation := graphql.ObjectConfig{Name: "Mutation", Fields: graphql.Fields{
 		"createUser": &graphql.Field{
@@ -146,10 +161,10 @@ func main() {
 					return nil, nil
 				}
 				password, ok := params.Args["password"].(string)
-
 				if !ok {
 					return nil, nil
 				}
+
 				// Hash the password
 				hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 				if err != nil {
@@ -170,13 +185,34 @@ func main() {
 				}
 
 				// Insert the new user into the database
-				newUser := User{Email: email, Password: string(hashedPassword)}
-				_, err = collection.InsertOne(context.Background(), newUser)
+				newUser := User{
+					Email:    email,
+					Password: string(hashedPassword),
+				}
+				result, err := collection.InsertOne(context.Background(), newUser)
 				if err != nil {
 					log.Fatal(err)
 				}
 
-				return "User created successfully.", nil
+				// Generate a JWT token
+				claims := &jwt.StandardClaims{
+					ExpiresAt: time.Now().Add(time.Hour * 1).Unix(), // Token expires in 1 hours
+					Subject:   fmt.Sprintf("%v", result.InsertedID),
+				}
+				token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+				tokenString, err := token.SignedString(jwtKey)
+				if err != nil {
+					log.Fatal(err)
+				}
+
+				// Set a cookie with the token
+				http.SetCookie(params.Context.Value("response").(http.ResponseWriter), &http.Cookie{
+					Name:     "token",
+					Value:    tokenString,
+					HttpOnly: true,
+				})
+
+				return "User created successfully", nil
 			},
 		},
 		"login": &graphql.Field{
@@ -234,19 +270,19 @@ func main() {
 			},
 		},
 	}}
+
 	schemaConfig := graphql.SchemaConfig{Query: graphql.NewObject(rootQuery), Mutation: graphql.NewObject(rootMutation)}
 	schema, err := graphql.NewSchema(schemaConfig)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	// Create a GraphQL HTTP server
-	graphqlHandler := handler.New(&handler.Config{
+	h := handler.New(&handler.Config{
 		Schema:   &schema,
 		Pretty:   true,
 		GraphiQL: true,
 	})
-	http.Handle("/graphql", graphqlHandler)
+	http.Handle("/graphql", withResponseWriter(h))
 
 	// Start the server
 	log.Println("Listening on :8080...")
@@ -254,7 +290,6 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-
 }
 
 // Generates a random reset token
@@ -265,4 +300,47 @@ func generateResetToken() string {
 		log.Fatal(err)
 	}
 	return fmt.Sprintf("%x", b)
+}
+
+type contextKey string
+
+func withResponseWriter(handler http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), contextKey("response"), w)
+		handler.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
+func authMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Check if the Authorization header is present in the request
+		tokenString := r.Header.Get("Authorization")
+		if tokenString == "" {
+			http.Error(w, "Authorization header is required", http.StatusUnauthorized)
+			return
+		}
+
+		// Parse the JWT token
+		token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+			// Check if the signing method is HMAC
+			if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+				return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
+			}
+
+			// Return the secret key
+			return jwtKey, nil
+		})
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusUnauthorized)
+			return
+		}
+
+		// Check if the token is valid
+		if !token.Valid {
+			http.Error(w, "Invalid token", http.StatusUnauthorized)
+			return
+		}
+
+		// Call the next handler
+		next.ServeHTTP(w, r)
+	})
 }

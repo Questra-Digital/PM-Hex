@@ -73,6 +73,7 @@ var queryType = graphql.NewObject(graphql.ObjectConfig{
 					}
 					features = append(features, feature)
 				}
+				fmt.Println(featureCollection) // added statement
 
 				return features, nil
 			},
@@ -139,8 +140,9 @@ func initGraphQL() error {
 	return nil
 }
 
-// Main function
 func main() {
+	// Initialize MongoDB
+	initMongoDB()
 
 	// Initialize GraphQL server
 	err := initGraphQL()

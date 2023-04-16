@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
+	"github.com/asaskevich/govalidator"
 	"github.com/dgrijalva/jwt-go"
 	"github.com/graphql-go/graphql"
 	"github.com/graphql-go/handler"
@@ -73,6 +75,17 @@ var userType = graphql.NewObject(graphql.ObjectConfig{
 	},
 })
 
+func validateEmail(email string) error {
+	if !govalidator.IsEmail(email) {
+		return fmt.Errorf("invalid email address")
+	}
+	return nil
+}
+
+func sanitizeInput(str string) string {
+	return strings.TrimSpace(str)
+}
+
 var rootMutation = graphql.NewObject(graphql.ObjectConfig{
 	Name: "Mutation",
 	Fields: graphql.Fields{
@@ -92,14 +105,17 @@ var rootMutation = graphql.NewObject(graphql.ObjectConfig{
 				if !emailOk || email == "" {
 					return nil, fmt.Errorf("email cannot be null")
 				}
-
+				if err := validateEmail(email); err != nil {
+					return nil, err
+				}
 				if !passOk || password == "" {
 					return nil, fmt.Errorf("password cannot be null")
 				}
 				if len(password) < 6 {
 					return nil, fmt.Errorf("password should be at least 6 characters long")
 				}
-
+				email = sanitizeInput(email)
+				password = sanitizeInput(password)
 				// Check if the user exists and the password is correct
 				for _, user := range users {
 					if user.Email == email && user.Password == password {

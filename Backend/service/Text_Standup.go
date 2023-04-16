@@ -68,6 +68,12 @@ var QueryType = graphql.NewObject(
 			"standupRecords": &graphql.Field{
 				Type: graphql.NewList(StandupRecordType),
 				Args: graphql.FieldConfigArgument{
+					"limit": &graphql.ArgumentConfig{
+						Type: graphql.Int,
+					},
+					"offset": &graphql.ArgumentConfig{
+						Type: graphql.Int,
+					},
 					"id": &graphql.ArgumentConfig{
 						Type: graphql.String,
 					},
@@ -91,6 +97,8 @@ var QueryType = graphql.NewObject(
 					},
 				},
 				Resolve: func(p graphql.ResolveParams) (interface{}, error) {
+					limit, limitOK := p.Args["limit"].(int)
+					offset, offsetOK := p.Args["offset"].(int)
 					id, idOK := p.Args["id"].(string)
 					title, titleOK := p.Args["title"].(string)
 					date, dateOK := p.Args["date"].(string)
@@ -99,64 +107,81 @@ var QueryType = graphql.NewObject(
 					updates, updatesOK := p.Args["updates"].([]string)
 					email, emailOK := p.Args["email"].(string)
 
+					var results []StandupRecord
+
+					// Filter the standupRecords based on the query arguments
 					if idOK {
 						for _, record := range standupRecords {
 							if record.ID == id {
-								return []StandupRecord{record}, nil
+								results = append(results, record)
 							}
 						}
-						return []StandupRecord{}, nil
 					} else if titleOK {
 						for _, record := range standupRecords {
 							if record.Title == title {
-								return []StandupRecord{record}, nil
+								results = append(results, record)
 							}
 						}
-						return []StandupRecord{}, nil
 					} else if dateOK {
 						for _, record := range standupRecords {
 							if record.Date == date {
-								return []StandupRecord{record}, nil
+								results = append(results, record)
 							}
 						}
-						return []StandupRecord{}, nil
 					} else if timingOK {
 						for _, record := range standupRecords {
 							if record.Timing == timing {
-								return []StandupRecord{record}, nil
+								results = append(results, record)
 							}
 						}
-						return []StandupRecord{}, nil
 					} else if participantsOK {
 						for _, record := range standupRecords {
 							if record.Participants == participants {
-								return []StandupRecord{record}, nil
+								results = append(results, record)
 							}
 						}
-						return []StandupRecord{}, nil
 					} else if updatesOK {
 						for _, record := range standupRecords {
 							found := false
 							for _, update := range record.Updates {
-								if update == updates[0] { // Assuming you only want to match the first update in the input
+								if update == updates[0] {
 									found = true
 									break
 								}
 							}
 							if found {
-								return []StandupRecord{record}, nil
+								results = append(results, record)
 							}
 						}
-						return []StandupRecord{}, nil
 					} else if emailOK {
 						for _, record := range standupRecords {
 							if record.Email == email {
-								return []StandupRecord{record}, nil
+								results = append(results, record)
 							}
 						}
-						return []StandupRecord{}, nil
+					} else {
+						results = standupRecords
 					}
-					return standupRecords, nil
+
+					// Apply pagination
+					if limitOK && offsetOK {
+						if offset < 0 {
+							return nil, fmt.Errorf("Invalid offset: %v", offset)
+						}
+						if limit <= 0 {
+							return nil, fmt.Errorf("Invalid limit: %v", limit)
+						}
+						if offset >= len(results) {
+							return []StandupRecord{}, nil
+						}
+						end := offset + limit
+						if end > len(results) {
+							end = len(results)
+						}
+						return results[offset:end], nil
+					} else {
+						return results, nil
+					}
 				},
 			},
 		},

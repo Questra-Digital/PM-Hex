@@ -38,44 +38,50 @@ class FeaturePlayListScreen extends StatelessWidget {
                   itemBuilder: (BuildContext context, int index) {
                     return Padding(
                       padding: const EdgeInsets.symmetric(vertical: 10),
-                      child: Container(
-                        height: SizeConfig.screenHeight * 0.3,
-                        decoration: BoxDecoration(
-                          color: const Color.fromARGB(255, 245, 238, 227),
-                          borderRadius: BorderRadius.zero,
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withOpacity(0.5),
-                              spreadRadius: 2,
-                              blurRadius: 5,
-                              offset: const Offset(0, 3),
-                            ),
-                          ],
-                        ),
-                        child: Column(
-                          children: [
-                            Image.asset(
-                              'assets/images/feature${index + 1}.jpeg', // Assuming images are named as feature1.jpeg, feature2.jpeg, etc.
-                              width:
-                                  310, // Adjust the width of the image as needed
-                              height:
-                                  140, // Adjust the height of the image as needed
-                              fit: BoxFit
-                                  .cover, // Adjust the fit of the image as needed
-                            ),
-                            const SizedBox(
+                      child: GestureDetector(
+                        onTap: () {
+                          // Add your onPressed function logic here
+                          print('Feature ${index + 1} pressed');
+                        },
+                        child: Container(
+                          height: SizeConfig.screenHeight * 0.3,
+                          decoration: BoxDecoration(
+                            color: const Color.fromARGB(255, 245, 238, 227),
+                            borderRadius: BorderRadius.zero,
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withOpacity(0.5),
+                                spreadRadius: 2,
+                                blurRadius: 5,
+                                offset: const Offset(0, 3),
+                              ),
+                            ],
+                          ),
+                          child: Column(
+                            children: [
+                              Image.asset(
+                                'assets/images/feature${index + 1}.jpeg', // Assuming images are named as feature1.jpeg, feature2.jpeg, etc.
+                                width:
+                                    310, // Adjust the width of the image as needed
                                 height:
-                                    10), // Add spacing between image and text
-                            Center(
-                              child: Text(
-                                features[index],
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 20,
+                                    140, // Adjust the height of the image as needed
+                                fit: BoxFit
+                                    .cover, // Adjust the fit of the image as needed
+                              ),
+                              const SizedBox(
+                                  height:
+                                      10), // Add spacing between image and text
+                              Center(
+                                child: Text(
+                                  features[index],
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 20,
+                                  ),
                                 ),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
                       ),
                     );

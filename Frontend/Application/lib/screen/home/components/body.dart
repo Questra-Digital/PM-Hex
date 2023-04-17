@@ -12,84 +12,79 @@ class Body extends StatelessWidget {
     return SafeArea(
       child: SingleChildScrollView(
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // Logo/Branding
-            Image.asset(
-              'assets/images/logo.png', // Replace with your actual logo image path
-              width: getProportionateScreenWidth(
-                  100), // Set the desired width for your logo
-              height: getProportionateScreenWidth(
-                  100), // Set the desired height for your logo
-            ),
             SizedBox(height: getProportionateScreenHeight(20)),
             Padding(
               padding: EdgeInsets.symmetric(
                   horizontal: getProportionateScreenWidth(20)),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  // Navigation/Menu
-                  Row(
-                    children: [
-                      TextButton(
-                        onPressed: () {
-                          // Handle menu item 1 press
-                        },
-                        child: Text(
-                          'Menu Item 1',
-                          style: TextStyle(
-                            color: kPrimaryColor,
-                            fontWeight: FontWeight.bold,
-                            fontSize: getProportionateScreenWidth(14),
-                          ),
-                        ),
-                      ),
-                      TextButton(
-                        onPressed: () {
-                          // Handle menu item 2 press
-                        },
-                        child: Text(
-                          'Menu Item 2',
-                          style: TextStyle(
-                            color: kPrimaryColor,
-                            fontWeight: FontWeight.bold,
-                            fontSize: getProportionateScreenWidth(14),
-                          ),
-                        ),
-                      ),
-                      TextButton(
-                        onPressed: () {
-                          // Handle menu item 3 press
-                        },
-                        child: Text(
-                          'Menu Item 3',
-                          style: TextStyle(
-                            color: kPrimaryColor,
-                            fontWeight: FontWeight.bold,
-                            fontSize: getProportionateScreenWidth(14),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  // CTA (Call-to-Action) Button
-                  ElevatedButton(
-                    onPressed: () {
-                      // Handle CTA button press
-                    },
-                    child: Text(
-                      'Get Started',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                        fontSize: getProportionateScreenWidth(14),
-                      ),
-                    ),
-                  ),
-                ],
+              child: Text(
+                'Digital Scrum Assistant',
+                style: TextStyle(
+                  color: Colors.black87,
+                  fontWeight: FontWeight.bold,
+                  fontSize: getProportionateScreenWidth(18),
+                ),
               ),
             ),
             SizedBox(height: getProportionateScreenHeight(20)),
+            const HomeHeader(),
+            SizedBox(height: getProportionateScreenWidth(10)),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                ElevatedButton(
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => FeaturePlayListScreen(),
+                      ),
+                    );
+                  },
+                  child: Text(
+                    'Feature List',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: getProportionateScreenWidth(14),
+                    ),
+                  ),
+                ),
+                SizedBox(width: getProportionateScreenWidth(10)),
+                ElevatedButton(
+                  onPressed: () {
+                    // Handle Contact Us button press
+                  },
+                  child: Text(
+                    'Contact Us',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: getProportionateScreenWidth(14),
+                    ),
+                  ),
+                ),
+                SizedBox(width: getProportionateScreenWidth(10)),
+                ElevatedButton(
+                  onPressed: () {
+                    // Handle About button press
+                  },
+                  child: Text(
+                    'About',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: getProportionateScreenWidth(14),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            SizedBox(
+                height: getProportionateScreenHeight(
+                    10)), // Add SizedBox with desired height
             // Hero Section
             Container(
               height: getProportionateScreenHeight(
@@ -104,63 +99,18 @@ class Body extends StatelessWidget {
               // Add any additional widgets or content for your Hero Section
             ),
             SizedBox(height: getProportionateScreenHeight(20)),
-            // Feature Highlights
-            // Add your feature highlights widgets or content here
-            SizedBox(height: getProportionateScreenHeight(20)),
-            // Testimonials
-            // Add your testimonials widgets or content here
-            SizedBox(height: getProportionateScreenHeight(20)),
-            // Social Proof
-            // Add your social proof widgets or content here
-            SizedBox(height: getProportionateScreenHeight(20)),
-            // your footer widgets or content here
-            Padding(
-              padding: EdgeInsets.symmetric(
-                  horizontal: getProportionateScreenWidth(20)),
-              child: Column(
-                children: [
-                  // Add your footer content here, such as contact information, links, etc.
-                  Text(
-                    'Contact us: contact@example.com',
-                    style: TextStyle(
-                      color: kTextColor,
-                      fontSize: getProportionateScreenWidth(14),
-                    ),
-                  ),
-                  SizedBox(height: getProportionateScreenHeight(10)),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      IconButton(
-                        onPressed: () {
-                          // Handle social media icon 1 press
-                        },
-                        icon: const Icon(
-                          Icons.facebook,
-                          color: kPrimaryColor,
-                        ),
-                      ),
-                      // IconButton(
-                      //   onPressed: () {
-                      //     // Handle social media icon 2 press
-                      //   },
-                      //   icon: Icon(
-                      //     Icons.twitter,
-                      //     color: kPrimaryColor,
-                      //   ),
-                      // ),
-                      // IconButton(
-                      //   onPressed: () {
-                      //     // Handle social media icon 3 press
-                      //   },
-                      //   icon: Icon(
-                      //     Icons.instagram,
-                      //     color: kPrimaryColor,
-                      //   ),
-                      // ),
-                    ],
-                  ),
-                ],
+            // CTA (Call-to-Action) Button
+            ElevatedButton(
+              onPressed: () {
+                // Handle CTA button press
+              },
+              child: Text(
+                'Get Started',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                  fontSize: getProportionateScreenWidth(14),
+                ),
               ),
             ),
           ],

@@ -42,7 +42,7 @@ class FeaturePlayListScreen extends StatelessWidget {
                   child: Column(
                     children: [
                       Image.asset(
-                        'feature${index + 1}.jpeg', // Assuming images are named as image1.jpg, image2.jpg, etc.
+                        'feature${index + 1}.jpeg', // Assuming images are named as feature1.jpeg, feature2.jpeg, etc.
                         width: 100, // Adjust the width of the image as needed
                         height: 100, // Adjust the height of the image as needed
                         fit: BoxFit

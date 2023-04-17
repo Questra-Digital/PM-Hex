@@ -19,14 +19,14 @@ class FeaturePlayListScreen extends StatelessWidget {
       ),
       body: Center(
         child: SizedBox(
-          width: SizeConfig.screenWidth * 0.4,
+          width: SizeConfig.screenWidth * 0.7,
           child: ListView.builder(
             itemCount: features.length,
             itemBuilder: (BuildContext context, int index) {
               return Padding(
                 padding: const EdgeInsets.symmetric(vertical: 10),
                 child: Container(
-                  height: SizeConfig.screenHeight * 1.2,
+                  height: SizeConfig.screenHeight * 0.3,
                   decoration: BoxDecoration(
                     color: Colors.orange,
                     borderRadius: BorderRadius.circular(10),
@@ -39,14 +39,27 @@ class FeaturePlayListScreen extends StatelessWidget {
                       ),
                     ],
                   ),
-                  child: Center(
-                    child: Text(
-                      features[index],
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 20,
+                  child: Column(
+                    children: [
+                      Image.asset(
+                        'feature${index + 1}.jpeg', // Assuming images are named as image1.jpg, image2.jpg, etc.
+                        width: 100, // Adjust the width of the image as needed
+                        height: 100, // Adjust the height of the image as needed
+                        fit: BoxFit
+                            .cover, // Adjust the fit of the image as needed
                       ),
-                    ),
+                      const SizedBox(
+                          height: 10), // Add spacing between image and text
+                      Center(
+                        child: Text(
+                          features[index],
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 20,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               );

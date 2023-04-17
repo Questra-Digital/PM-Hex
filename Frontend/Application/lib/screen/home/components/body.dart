@@ -46,10 +46,6 @@ class Body extends StatelessWidget {
                       ),
                       IconButton(
                         onPressed: () {},
-                        icon: const Icon(Icons.contact_mail),
-                      ),
-                      IconButton(
-                        onPressed: () {},
                         icon: const Icon(Icons.info_outline),
                       ),
                     ],

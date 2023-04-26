@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../size_config.dart';
+import 'package:digital_scrum_assistant/screen/featureList/StandupRecordForm.dart';
 
 class FeaturePlayListScreen extends StatelessWidget {
   FeaturePlayListScreen({Key? key}) : super(key: key);
@@ -40,8 +41,13 @@ class FeaturePlayListScreen extends StatelessWidget {
                       padding: const EdgeInsets.symmetric(vertical: 10),
                       child: GestureDetector(
                         onTap: () {
-                          // Add your onPressed function logic here
-                          print('Feature ${index + 1} pressed');
+                          if (index == 0) {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                  builder: (context) => StandupRecordForm()),
+                            );
+                          }
                         },
                         child: Container(
                           height: SizeConfig.screenHeight * 0.3,

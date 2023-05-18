@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"math/rand"
 	"net/http"
@@ -16,6 +17,8 @@ import (
 )
 
 type User struct {
+	ID          string `bson:"_id"`
+	Name        string `bson:"name"`
 	PhoneNumber string `bson:"phoneNumber"`
 	OTP         string `bson:"otp"`
 	ExpiredAt   int64  `bson:"expiredAt"`
@@ -42,11 +45,19 @@ func init() {
 	collection = client.Database("myDatabase").Collection("users")
 }
 
+// ...
+
 func main() {
 	// Define GraphQL schema
 	var userType = graphql.NewObject(graphql.ObjectConfig{
 		Name: "User",
 		Fields: graphql.Fields{
+			"id": &graphql.Field{
+				Type: graphql.String,
+			},
+			"name": &graphql.Field{
+				Type: graphql.String,
+			},
 			"phoneNumber": &graphql.Field{
 				Type: graphql.String,
 			},
@@ -82,19 +93,7 @@ func main() {
 		},
 	})
 
-	// rootQuery := graphql.NewObject(graphql.ObjectConfig{
-	// 	Name: "Query",
-	// 	Fields: graphql.Fields{
-	// 		"ping": &graphql.Field{
-	// 			Type: graphql.String,
-	// 			Resolve: func(p graphql.ResolveParams) (interface{}, error) {
-	// 				return "pong", nil
-	// 			},
-	// 		},
-	// 	},
-	// })
-
-	rootMutation := graphql.NewObject(graphql.ObjectConfig{
+	var rootMutation = graphql.NewObject(graphql.ObjectConfig{
 		Name: "Mutation",
 		Fields: graphql.Fields{
 			"sendOTP": &graphql.Field{
@@ -104,9 +103,13 @@ func main() {
 					"phoneNumber": &graphql.ArgumentConfig{
 						Type: graphql.NewNonNull(graphql.String),
 					},
+					"name": &graphql.ArgumentConfig{
+						Type: graphql.NewNonNull(graphql.String),
+					},
 				},
 				Resolve: func(p graphql.ResolveParams) (interface{}, error) {
 					phoneNumber, _ := p.Args["phoneNumber"].(string)
+					name, _ := p.Args["name"].(string)
 
 					// Generate random OTP code
 					rand.Seed(time.Now().UnixNano())
@@ -114,16 +117,18 @@ func main() {
 
 					// Set OTP expiration time to 5 minutes from now
 					expiredAt := time.Now().Add(5 * time.Minute).Unix()
-
 					// Create user document
 					user := User{
+						ID:          phoneNumber,
+						Name:        name,
 						PhoneNumber: phoneNumber,
 						OTP:         otp,
 						ExpiredAt:   expiredAt,
 					}
 
-					// Insert user document into MongoDB collection
-					_, err := collection.InsertOne(context.Background(), user)
+					// Insert or update user document in MongoDB collection
+					update := bson.M{"$set": user}
+					_, err := collection.UpdateOne(context.Background(), bson.M{"_id": phoneNumber}, update, options.Update().SetUpsert(true))
 					if err != nil {
 						return false, err
 					}
@@ -145,9 +150,8 @@ func main() {
 				Resolve: func(p graphql.ResolveParams) (interface{}, error) {
 					phoneNumber, _ := p.Args["phoneNumber"].(string)
 					otp, _ := p.Args["otp"].(string)
-
 					// Get user document from MongoDB collection
-					filter := bson.M{"phoneNumber": phoneNumber, "otp": otp, "expiredAt": bson.M{"$gt": time.Now().Unix()}}
+					filter := bson.M{"_id": phoneNumber, "otp": otp, "expiredAt": bson.M{"$gt": time.Now().Unix()}}
 
 					var result User
 					err := collection.FindOne(context.Background(), filter).Decode(&result)
@@ -165,21 +169,70 @@ func main() {
 					return true, nil
 				},
 			},
+			"updateUserProfile": &graphql.Field{
+				Type:        userType,
+				Description: "Mutation to update user profile information",
+				Args: graphql.FieldConfigArgument{
+					"phoneNumber": &graphql.ArgumentConfig{
+						Type: graphql.NewNonNull(graphql.String),
+					},
+					"name": &graphql.ArgumentConfig{
+						Type: graphql.String,
+					},
+				},
+				Resolve: func(p graphql.ResolveParams) (interface{}, error) {
+					phoneNumber, _ := p.Args["phoneNumber"].(string)
+					name, _ := p.Args["name"].(string)
+
+					update := bson.M{"$set": bson.M{"name": name}}
+
+					_, err := collection.UpdateOne(context.Background(), bson.M{"_id": phoneNumber}, update)
+					if err != nil {
+						return nil, err
+					}
+
+					// Fetch the updated user document from MongoDB collection
+					var user User
+					err = collection.FindOne(context.Background(), bson.M{"_id": phoneNumber}).Decode(&user)
+					if err != nil {
+						return nil, err
+					}
+
+					return user, nil
+				},
+			},
 		},
 	})
+
 	schema, err := graphql.NewSchema(graphql.SchemaConfig{
 		Query:    rootQuery,
 		Mutation: rootMutation,
 	})
 	if err != nil {
+		// Handle the error appropriately, such as logging it or returning an error response.
+		fmt.Println("Error creating GraphQL schema:", err)
+		return
+	}
+	// Create a GraphQL handler
+	graphQLHandler := handler.New(&handler.Config{
+		Schema:   &schema,
+		Pretty:   true,
+		GraphiQL: true,
+	})
+
+	// Serve the GraphQL API and GraphiQL playground
+	mux := http.NewServeMux()
+	mux.Handle("/otp", graphQLHandler)
+
+	// Serve the GraphiQL playground at the root path ("/")
+	mux.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/otp", http.StatusSeeOther)
+	}))
+
+	log.Println("Listening on :8080...")
+	log.Fatal(http.ListenAndServe(":8080", mux))
+	if err != nil {
 		log.Fatal(err)
 	}
 
-	// Set up GraphQL HTTP server
-	h := handler.New(&handler.Config{
-		Schema: &schema,
-	})
-
-	http.Handle("/graphql", h)
-	log.Fatal(http.ListenAndServe(":8080", nil))
 }

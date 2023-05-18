@@ -14,6 +14,7 @@ import (
 	"github.com/go-playground/validator/v10"
 	"github.com/google/uuid"
 	"github.com/graphql-go/graphql"
+	"github.com/graphql-go/handler"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
@@ -26,8 +27,6 @@ type User struct {
 	Password        string `json:"password" validate:"required,min=8"`
 	ConfirmPassword string `json:"confirmpassword" validate:"required,eqfield=Password"`
 }
-
-var users []*User
 
 var userType = graphql.NewObject(
 	graphql.ObjectConfig{
@@ -98,56 +97,8 @@ var rootMutation = graphql.NewObject(
 						Type: graphql.NewNonNull(graphql.String),
 					},
 				},
-				Resolve: func(p graphql.ResolveParams) (interface{}, error) {
-					// Call connectToDatabase function to connect to the database
-					client, err := connectToDatabase()
-					if err != nil {
-						return nil, err
-					}
-					defer client.Disconnect(context.Background())
-
-					// Create a new validator
-					validate := validator.New()
-					// Parse the user argument from the input parameters
-					var user User
-					err = json.Unmarshal([]byte(p.Args["user"].(string)), &user)
-					if err != nil {
-						return nil, err
-					}
-
-					// Validate the user input
-					err = validate.Struct(user)
-					if err != nil {
-						return nil, err
-					}
-					// Check if the user already exists
-					for _, u := range users {
-						if u.Email == user.Email {
-							return nil, fmt.Errorf("user already exists")
-						}
-					}
-					// Generate a new UUID for the user
-					user.ID = uuid.New().String()
-					// Hash the user's password
-					hashedPassword, err := bcrypt.GenerateFromPassword([]byte(user.Password), bcrypt.DefaultCost)
-					if err != nil {
-						return nil, err
-					}
-					user.Password = string(hashedPassword)
-
-					// Create the user
-					err = createUser(user)
-					if err != nil {
-						return nil, err
-					}
-
-					// Add the user to the list of users
-					users = append(users, &user)
-					// Return the newly created user
-					return &user, nil
-				},
+				Resolve: registerUser,
 			},
-
 			"login": &graphql.Field{
 				Type: graphql.String,
 				Args: graphql.FieldConfigArgument{
@@ -158,165 +109,179 @@ var rootMutation = graphql.NewObject(
 						Type: graphql.NewNonNull(graphql.String),
 					},
 				},
-				Resolve: func(p graphql.ResolveParams) (interface{}, error) {
-					email := p.Args["email"].(string)
-					password := p.Args["password"].(string)
-					// Find the user with the given email
-					var user *User
-					for _, u := range users {
-						if u.Email == email {
-							user = u
-							break
-						}
-					}
-					if user == nil {
-						return nil, fmt.Errorf("user not found")
-					}
-					// Compare the password hash with the provided password
-					err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password))
-					if err != nil {
-						return nil, err
-					}
-					// Generate a new JWT token
-					token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-						"sub": user.ID,
-						"exp": time.Now().Add(time.Hour * 24).Unix(),
-					})
-					// Get the secret key from the environment variable
-					secretKey := os.Getenv("JWT_SECRET_KEY")
-					if secretKey == "" {
-						return nil, fmt.Errorf("JWT_SECRET_KEY environment variable not set")
-					}
-					// Sign the token with the secret key
-					tokenString, err := token.SignedString([]byte(secretKey))
-					if err != nil {
-						return nil, err
-					}
-					// Return the token
-					return tokenString, nil
+				Resolve: loginUser,
+			},
+			"deleteUser": &graphql.Field{
+				Type: userType,
+				Args: graphql.FieldConfigArgument{
+					"id": &graphql.ArgumentConfig{Type: graphql.String},
 				},
+				Resolve: deleteUser,
 			},
 		},
 	},
 )
 
+func getAllUsers(p graphql.ResolveParams) (interface{}, error) {
+	client, err := mongo.Connect(context.Background(), options.Client().ApplyURI("mongodb://localhost:27017"))
+	if err != nil {
+		return nil, err
+	}
+	defer client.Disconnect(context.Background())
+
+	collection := client.Database("testdb").Collection("users")
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	cursor, err := collection.Find(ctx, bson.M{})
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	var users []User
+	if err := cursor.All(ctx, &users); err != nil {
+		return nil, err
+	}
+	return users, nil
+}
+
+func registerUser(p graphql.ResolveParams) (interface{}, error) {
+	client, err := mongo.Connect(context.Background(), options.Client().ApplyURI("mongodb://localhost:27017"))
+	if err != nil {
+		return nil, err
+	}
+	defer client.Disconnect(context.Background())
+
+	// Create a new validator
+	validate := validator.New()
+	// Parse the user argument from the input parameters
+	var user User
+	err = json.Unmarshal([]byte(p.Args["user"].(string)), &user)
+	if err != nil {
+		return nil, err
+	}
+
+	// Validate the user input
+	err = validate.Struct(user)
+	if err != nil {
+		return nil, err
+	}
+
+	// Generate a unique ID for the user
+	user.ID = uuid.New().String()
+
+	// Hash the user's password
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(user.Password), bcrypt.DefaultCost)
+	if err != nil {
+		return nil, err
+	}
+	user.Password = string(hashedPassword)
+
+	// Save the user to the database
+	collection := client.Database("testdb").Collection("users")
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	_, err = collection.InsertOne(ctx, user)
+	if err != nil {
+		return nil, err
+	}
+
+	return user, nil
+}
+
+func loginUser(p graphql.ResolveParams) (interface{}, error) {
+	client, err := mongo.Connect(context.Background(), options.Client().ApplyURI("mongodb://localhost:27017"))
+	if err != nil {
+		return nil, err
+	}
+	defer client.Disconnect(context.Background())
+
+	email := p.Args["email"].(string)
+	password := p.Args["password"].(string)
+
+	collection := client.Database("myDatabase").Collection("Credentials")
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	var user User
+	err = collection.FindOne(ctx, bson.M{"email": email}).Decode(&user)
+	if err != nil {
+		return nil, err
+	}
+
+	err = bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password))
+	if err != nil {
+		return nil, fmt.Errorf("incorrect email or password")
+	}
+
+	// Create a new JWT token
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"userId": user.ID,
+		"exp":    time.Now().Add(time.Hour * 24).Unix(),
+	})
+
+	// Get the secret key from the environment variable
+	secretKey := os.Getenv("JWT_SECRET_KEY")
+	if secretKey == "" {
+		return nil, fmt.Errorf("JWT_SECRET_KEY environment variable not set")
+	}
+
+	// Sign the token with the secret key
+	tokenString, err := token.SignedString([]byte(secretKey))
+	if err != nil {
+		return nil, err
+	}
+
+	return tokenString, nil
+}
+
+// Delete a user by ID
+func deleteUser(params graphql.ResolveParams) (interface{}, error) {
+	id, _ := params.Args["id"].(string)
+
+	// Connect to MongoDB
+	client, err := mongo.Connect(context.Background(), options.Client().ApplyURI("mongodb://localhost:27017"))
+	if err != nil {
+		return nil, err
+	}
+	defer client.Disconnect(context.Background())
+
+	// Find the user by ID and delete it
+	var user User
+	collection := client.Database("myDatabase").Collection("Profile")
+	err = collection.FindOneAndDelete(context.Background(), bson.M{"_id": id}).Decode(&user)
+	if err != nil {
+		return nil, err
+	}
+
+	return user, nil
+}
+
 func main() {
-	// Create a new GraphQL schema with the rootQuery and rootMutation
+	// Define the GraphQL schema
 	schema, err := graphql.NewSchema(
 		graphql.SchemaConfig{
 			Query:    rootQuery,
 			Mutation: rootMutation,
 		},
 	)
-
 	if err != nil {
-		log.Fatalf("failed to create schema: %v", err)
+		log.Fatal(err)
 	}
-	// Create a new HTTP server with the GraphQL endpoint
-	http.Handle("/graphql", AuthMiddleware(&graphqlHandler{Schema: &schema}))
-	// Start the HTTP server
-	log.Println("listening on :8080")
-	log.Fatal(http.ListenAndServe(":8080", nil))
-}
 
-type graphqlHandler struct {
-	Schema *graphql.Schema
-}
-
-func (h *graphqlHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	query := r.URL.Query().Get("query")
-	// result := graphql.Do(graphql.Query(r.URL.Query().Get("query")).Schema(*h.Schema))
-	result := graphql.Do(graphql.Params{
-		Schema:        *h.Schema,
-		RequestString: query,
+	// Create a GraphQL HTTP handler with the schema
+	graphQLHandler := handler.New(&handler.Config{
+		Schema:   &schema,
+		Pretty:   true,
+		GraphiQL: true,
 	})
 
-	// Check for errors in the result
-	if len(result.Errors) > 0 {
-		log.Printf("failed to execute query: %v", result.Errors)
-		http.Error(w, "failed to execute query", http.StatusBadRequest)
-		return
-	}
-	// Encode the result as JSON and write it to the response
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(result)
-}
+	// Register the GraphQL handler without the Auth middleware for the /signup endpoint
+	http.Handle("/signup", graphQLHandler)
 
-func connectToDatabase() (*mongo.Client, error) {
-	// Get the MongoDB connection string from the environment variable
-	mongoURI := os.Getenv("MONGO_URI")
-	if mongoURI == "" {
-		return nil, fmt.Errorf("MONGO_URI environment variable not set")
-	}
-	// Set the options for the MongoDB client
-	clientOptions := options.Client().ApplyURI(mongoURI).SetConnectTimeout(10 * time.Second)
-	// Create a new MongoDB client
-	client, err := mongo.Connect(context.Background(), clientOptions)
-	if err != nil {
-		return nil, fmt.Errorf("failed to connect to MongoDB: %v", err)
-	}
-	// Check the connection
-	err = client.Ping(context.Background(), nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to ping MongoDB: %v", err)
-	}
-	return client, nil
-}
-
-func createUser(user User) error {
-	// Hash the user's password
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(user.Password), bcrypt.DefaultCost)
-	if err != nil {
-		return fmt.Errorf("failed to hash password: %v", err)
-	}
-	// Create a new user document
-	userDoc := bson.M{
-		"_id":             uuid.New().String(),
-		"email":           user.Email,
-		"hashed_password": hashedPassword,
-		"created_at":      time.Now().UTC(),
-		"updated_at":      time.Now().UTC(),
-	}
-
-	// Get the MongoDB client
-	client, err := connectToDatabase()
-	if err != nil {
-		return fmt.Errorf("failed to connect to MongoDB: %v", err)
-	}
-	defer client.Disconnect(context.Background())
-	// Get the users collection
-	usersCollection := client.Database("myDatabase").Collection("Credentials")
-	// Insert the user document
-	_, err = usersCollection.InsertOne(context.Background(), userDoc)
-	if err != nil {
-		return fmt.Errorf("failed to insert user document: %v", err)
-	}
-	return nil
-}
-func getAllUsers(p graphql.ResolveParams) (interface{}, error) {
-	// Call connectToDatabase function to connect to the database
-	client, err := connectToDatabase()
-	if err != nil {
-		return nil, err
-	}
-	defer client.Disconnect(context.Background())
-
-	// Get the users collection from the database
-	collection := client.Database("myDatabase").Collection("Credentials")
-
-	// Query the users collection to get all documents
-	cursor, err := collection.Find(context.Background(), bson.D{})
-	if err != nil {
-		return nil, err
-	}
-	defer cursor.Close(context.Background())
-
-	// Decode the cursor into a slice of users
-	var users []User
-	if err := cursor.All(context.Background(), &users); err != nil {
-		return nil, err
-	}
-
-	// Return the list of users
-	return users, nil
+	// Start the server on port 8080
+	log.Println("Server started on http://localhost:8080/signup")
+	log.Fatal(http.ListenAndServe(":8080", nil))
 }

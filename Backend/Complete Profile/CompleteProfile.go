@@ -169,7 +169,7 @@ func initGraphQL() error {
 	})
 
 	// Define HTTP server and route handler
-	http.HandleFunc("/graphql", func(w http.ResponseWriter, r *http.Request) {
+	http.HandleFunc("/completeprofile", func(w http.ResponseWriter, r *http.Request) {
 		h.ServeHTTP(w, r)
 	})
 
@@ -191,6 +191,6 @@ func main() {
 	}
 
 	// Start HTTP server
-	log.Printf("Server started on http://localhost:8080/graphql")
+	log.Printf("Server started on http://localhost:8080/completeprofile")
 	log.Fatal(http.ListenAndServe(":8080", nil))
 }

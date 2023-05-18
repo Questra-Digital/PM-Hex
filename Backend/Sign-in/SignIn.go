@@ -2,7 +2,7 @@ package main
 
 import (
 	"context"
-	"encoding/json"
+
 	"fmt"
 	"log"
 	"net/http"
@@ -13,7 +13,6 @@ import (
 	"github.com/dgrijalva/jwt-go"
 	"github.com/graphql-go/graphql"
 	"github.com/graphql-go/handler"
-	"github.com/rs/cors"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
@@ -42,7 +41,7 @@ var users = []User{
 	},
 }
 
-func generateToken(user *User) (map[string]interface{}, error) {
+func generateToken(user *User) (string, error) {
 	// Set the expiration time for the token
 	expirationTime := time.Now().Add(tokenExpireDuration)
 
@@ -55,12 +54,10 @@ func generateToken(user *User) (map[string]interface{}, error) {
 	// Generate the signed token string using the secret key
 	tokenString, err := token.SignedString(jwtKey)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 
-	return map[string]interface{}{
-		"token": tokenString,
-	}, nil
+	return tokenString, nil
 }
 
 var userType = graphql.NewObject(graphql.ObjectConfig{
@@ -86,11 +83,61 @@ func sanitizeInput(str string) string {
 	return strings.TrimSpace(str)
 }
 
+var rootQuery = graphql.NewObject(graphql.ObjectConfig{
+	Name: "Query",
+	Fields: graphql.Fields{
+		"user": &graphql.Field{
+			Type: userType,
+			Args: graphql.FieldConfigArgument{
+				"id": &graphql.ArgumentConfig{
+					Type: graphql.String,
+				},
+				"email": &graphql.ArgumentConfig{
+					Type: graphql.String,
+				},
+			},
+			Resolve: func(params graphql.ResolveParams) (interface{}, error) {
+				id, idOk := params.Args["id"].(string)
+				email, emailOk := params.Args["email"].(string)
+
+				if !idOk && !emailOk {
+					return nil, fmt.Errorf("id or email argument is required")
+				}
+
+				// Implement the logic to fetch user information based on ID or email
+				var user *User
+				for _, u := range users {
+					if (idOk && u.ID == id) || (emailOk && u.Email == email) {
+						user = &u
+						break
+					}
+				}
+
+				if user == nil {
+					return nil, fmt.Errorf("user not found")
+				}
+
+				return user, nil
+			},
+		},
+	},
+})
+
 var rootMutation = graphql.NewObject(graphql.ObjectConfig{
 	Name: "Mutation",
 	Fields: graphql.Fields{
 		"signIn": &graphql.Field{
-			Type: userType,
+			Type: graphql.NewObject(graphql.ObjectConfig{
+				Name: "SignInResponse",
+				Fields: graphql.Fields{
+					"user": &graphql.Field{
+						Type: userType,
+					},
+					"token": &graphql.Field{
+						Type: graphql.String,
+					},
+				},
+			}),
 			Args: graphql.FieldConfigArgument{
 				"email": &graphql.ArgumentConfig{
 					Type: graphql.NewNonNull(graphql.String),
@@ -124,15 +171,14 @@ var rootMutation = graphql.NewObject(graphql.ObjectConfig{
 						if err != nil {
 							return nil, err
 						}
-
 						// Return the authenticated user and the token
-						return map[string]interface{}{
+						response := map[string]interface{}{
 							"user":  user,
 							"token": token,
-						}, nil
+						}
+						return response, nil
 					}
 				}
-
 				// Return an error if the email or password is incorrect
 				return nil, fmt.Errorf("incorrect email or password")
 			},
@@ -140,102 +186,7 @@ var rootMutation = graphql.NewObject(graphql.ObjectConfig{
 	},
 })
 
-func authMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Get the JWT token from the Authorization header
-		tokenString := r.Header.Get("Authorization")
-		if tokenString == "" {
-			http.Error(w, "Missing Authorization header", http.StatusUnauthorized)
-			return
-		}
-
-		// Parse the JWT token using the secret key
-		token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
-			if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-				return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
-			}
-
-			return jwtKey, nil
-		})
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusUnauthorized)
-			return
-		}
-
-		// Check if the token is valid
-		if _, ok := token.Claims.(jwt.MapClaims); !ok || !token.Valid {
-			http.Error(w, "Invalid Authorization token", http.StatusUnauthorized)
-			return
-		}
-
-		// Call the next middleware or handler function
-		next.ServeHTTP(w, r)
-	})
-}
-
-var schema, _ = graphql.NewSchema(graphql.SchemaConfig{
-	Query:    nil,
-	Mutation: rootMutation,
-})
-
 func main() {
-
-	h := handler.New(&handler.Config{
-		Schema:   &schema,
-		Pretty:   true,
-		GraphiQL: true,
-	})
-
-	http.Handle("/graphql", h)
-
-	c := cors.New(cors.Options{
-		AllowedOrigins: []string{"*"},
-		AllowedMethods: []string{"POST"},
-	})
-	handlerWithCORS := c.Handler(h)
-
-	http.Handle("/graphql", handlerWithCORS)
-
-	s := &http.Server{
-		Addr:           ":8080",
-		Handler:        nil,
-		ReadTimeout:    10 * time.Second,
-		WriteTimeout:   10 * time.Second,
-		MaxHeaderBytes: 1 << 20,
-	}
-	http.HandleFunc("/signin", func(w http.ResponseWriter, r *http.Request) {
-		// Parse the request body
-		var user User
-		err := json.NewDecoder(r.Body).Decode(&user)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-
-		// Check if the user exists and the password is correct
-		for _, u := range users {
-			if u.Email == user.Email && u.Password == user.Password {
-				// Generate a JWT token for the authenticated user
-				token, err := generateToken(&u)
-				if err != nil {
-					http.Error(w, err.Error(), http.StatusInternalServerError)
-					return
-				}
-
-				// Return the authenticated user and the token
-				response := map[string]interface{}{
-					"user":  u,
-					"token": token,
-				}
-				json.NewEncoder(w).Encode(response)
-				return
-			}
-		}
-		// Return an error if the email or password is incorrect
-		http.Error(w, "incorrect email or password", http.StatusUnauthorized)
-	})
-
-	log.Fatal(s.ListenAndServe())
 	// Connect to MongoDB
 	clientOptions := options.Client().ApplyURI("mongodb://localhost:27017")
 	client, err := mongo.Connect(context.Background(), clientOptions)
@@ -246,9 +197,7 @@ func main() {
 		if err = client.Disconnect(context.Background()); err != nil {
 			log.Fatal(err)
 		}
-	}()
-
-	// Check the connection
+	}() // Check the connection
 	err = client.Ping(context.Background(), nil)
 	if err != nil {
 		log.Fatal(err)
@@ -256,6 +205,7 @@ func main() {
 
 	// Get a handle for your collection
 	collection := client.Database("myDatabase").Collection("Credentials")
+
 	// Insert the data into the collection
 	for _, record := range users {
 		doc := bson.M{
@@ -269,29 +219,26 @@ func main() {
 		}
 	}
 
-	// Query the collection
-	cur, err := collection.Find(context.Background(), bson.D{})
+	// Create a new GraphQL schema with the query and mutation types
+	schema, err := graphql.NewSchema(graphql.SchemaConfig{
+		Query:    rootQuery,
+		Mutation: rootMutation,
+	})
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer cur.Close(context.Background())
-	for cur.Next(context.Background()) {
-		var result bson.M
-		err := cur.Decode(&result)
-		if err != nil {
-			log.Fatal(err)
-		}
-		fmt.Println(result)
-	}
 
-	// Wrap the GraphQL schema handler with the authentication middleware
-	authHandler := authMiddleware(h)
+	// Create a new GraphQL handler
+	graphQLHandler := handler.New(&handler.Config{
+		Schema:   &schema,
+		Pretty:   true,
+		GraphiQL: true,
+	})
 
-	// Register the authentication-wrapped GraphQL schema handler with the /graphql endpoint
-	http.Handle("/graphql", authHandler)
+	// Handle the /graphql endpoint
+	http.Handle("/signin", graphQLHandler)
 
-	fmt.Println("Data inserted successfully")
-
-	fmt.Println("Server is running on port 8080")
-	s.ListenAndServe()
+	// Start the server
+	fmt.Println("Server started on http://localhost:8080/signin")
+	log.Fatal(http.ListenAndServe(":8080", nil))
 }

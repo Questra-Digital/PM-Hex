@@ -17,17 +17,37 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
-// StandupRecord struct
-type StandupRecord struct {
-	ID           string   `json:"id"`
-	Title        string   `json:"title"`
-	Date         string   `json:"date"`
-	Timing       string   `json:"timing"`
-	Participants string   `json:"participants" bson:"participants"`
-	Updates      []string `json:"updates" bson:"updates"`
-	Email        string   `json:"email" bson:"email"`
+func containsDay(daysOfWeek []time.Weekday, day time.Weekday) bool {
+	for _, d := range daysOfWeek {
+		if d == day {
+			return true
+		}
+	}
+	return false
 }
 
+// StandupRecord struct
+type StandupRecord struct {
+	ID           string         `json:"id"`
+	Title        string         `json:"title"`
+	Date         string         `json:"date"`
+	Timing       string         `json:"timing"`
+	Participants string         `json:"participants" bson:"participants"`
+	Updates      []string       `json:"updates" bson:"updates"`
+	Email        string         `json:"email" bson:"email"`
+	Team         string         `json:"team" bson:"team"`
+	DaysOfWeek   []time.Weekday `json:"daysOfWeek" bson:"daysOfWeek"`
+}
+
+var daysOfWeekMap = map[string]time.Weekday{
+	"Sunday":    time.Sunday,
+	"Monday":    time.Monday,
+	"Tuesday":   time.Tuesday,
+	"Wednesday": time.Wednesday,
+	"Thursday":  time.Thursday,
+	"Friday":    time.Friday,
+	"Saturday":  time.Saturday,
+}
 var standupRecords []StandupRecord
 
 // StandupRecordType defines the GraphQL schema for a StandupRecord
@@ -54,6 +74,12 @@ var StandupRecordType = graphql.NewObject(
 				Type: graphql.String,
 			},
 			"email": &graphql.Field{
+				Type: graphql.String,
+			},
+			"team": &graphql.Field{
+				Type: graphql.String,
+			},
+			"daysOfWeek": &graphql.Field{
 				Type: graphql.String,
 			},
 		},
@@ -95,6 +121,12 @@ var QueryType = graphql.NewObject(
 					"email": &graphql.ArgumentConfig{
 						Type: graphql.String,
 					},
+					"team": &graphql.ArgumentConfig{
+						Type: graphql.String,
+					},
+					"daysOfWeek": &graphql.ArgumentConfig{
+						Type: graphql.NewList(graphql.String),
+					},
 				},
 				Resolve: func(p graphql.ResolveParams) (interface{}, error) {
 					limit, limitOK := p.Args["limit"].(int)
@@ -106,6 +138,8 @@ var QueryType = graphql.NewObject(
 					participants, participantsOK := p.Args["participants"].(string)
 					updates, updatesOK := p.Args["updates"].([]string)
 					email, emailOK := p.Args["email"].(string)
+					team, teamOK := p.Args["team"].(string)
+					daysOfWeek, daysOfWeekOK := p.Args["daysOfWeek"].([]time.Weekday)
 
 					var results []StandupRecord
 
@@ -159,6 +193,21 @@ var QueryType = graphql.NewObject(
 								results = append(results, record)
 							}
 						}
+					} else if teamOK {
+						for _, record := range standupRecords {
+							if record.Team == team {
+								results = append(results, record)
+							}
+						}
+					} else if daysOfWeekOK {
+						for _, record := range standupRecords {
+							for _, day := range record.DaysOfWeek {
+								if containsDay(daysOfWeek, day) {
+									results = append(results, record)
+									break
+								}
+							}
+						}
 					} else {
 						results = standupRecords
 					}
@@ -166,10 +215,10 @@ var QueryType = graphql.NewObject(
 					// Apply pagination
 					if limitOK && offsetOK {
 						if offset < 0 {
-							return nil, fmt.Errorf("Invalid offset: %v", offset)
+							return nil, fmt.Errorf("invalid offset: %v", offset)
 						}
 						if limit <= 0 {
-							return nil, fmt.Errorf("Invalid limit: %v", limit)
+							return nil, fmt.Errorf("invalid limit: %v", limit)
 						}
 						if offset >= len(results) {
 							return []StandupRecord{}, nil
@@ -215,6 +264,12 @@ var MutationType = graphql.NewObject(
 					"email": &graphql.ArgumentConfig{
 						Type: graphql.NewNonNull(graphql.String),
 					},
+					"team": &graphql.ArgumentConfig{
+						Type: graphql.NewNonNull(graphql.String),
+					},
+					"daysOfWeek": &graphql.ArgumentConfig{
+						Type: graphql.NewList(graphql.String),
+					},
 				},
 				Resolve: func(p graphql.ResolveParams) (interface{}, error) {
 					title, _ := p.Args["title"].(string)
@@ -224,6 +279,8 @@ var MutationType = graphql.NewObject(
 					timing := time.Now().Format("3:04 PM")
 					date := time.Now().Format("Jan 2, 2006")
 					id := fmt.Sprintf("%d", len(standupRecords)+1)
+					team := p.Args["team"].(string)
+					daysOfWeek, _ := p.Args["daysOfWeek"].([]time.Weekday)
 					// Combine the ID, timing, and date into a single string
 					// recordID := fmt.Sprintf("%s_%s_%s", id, timing, date)
 					newRecord := StandupRecord{
@@ -234,6 +291,8 @@ var MutationType = graphql.NewObject(
 						Participants: participants,
 						Email:        email,
 						Updates:      updates,
+						Team:         team,
+						DaysOfWeek:   daysOfWeek,
 					}
 					standupRecords = append(standupRecords, newRecord)
 					return newRecord, nil
@@ -263,6 +322,12 @@ var MutationType = graphql.NewObject(
 					"email": &graphql.ArgumentConfig{
 						Type: graphql.String,
 					},
+					"team": &graphql.ArgumentConfig{
+						Type: graphql.String,
+					},
+					"daysOfWeek": &graphql.ArgumentConfig{
+						Type: graphql.String,
+					},
 				},
 				Resolve: func(params graphql.ResolveParams) (interface{}, error) {
 					// Get the ID of the record to be edited
@@ -290,6 +355,22 @@ var MutationType = graphql.NewObject(
 							if email, ok := params.Args["email"].(string); ok {
 								standupRecords[i].Email = email
 							}
+							if team, ok := params.Args["team"].(string); ok {
+								standupRecords[i].Team = team
+							}
+							if daysofweek, ok := params.Args["daysofweek"].(string); ok {
+								var daysOfWeek []time.Weekday
+								for _, name := range strings.Split(daysofweek, ",") {
+									name = strings.TrimSpace(name)
+									if day, found := daysOfWeekMap[name]; found {
+										daysOfWeek = append(daysOfWeek, day)
+									} else {
+										return nil, fmt.Errorf("invalid weekday name: %s", name)
+									}
+								}
+								standupRecords[i].DaysOfWeek = daysOfWeek
+							}
+
 							return standupRecords[i], nil
 						}
 					}
@@ -340,7 +421,8 @@ func runExampleMutation() {
 			   email: "bsce19014@itu.edu.pk, bsce19040@itu.edu.pk",
 			   updates: "Text-based standup is done",
 			   timing: "10:00 AM",
-               date: "2022-03-05") 
+               date: "2022-03-05"
+			   team:"multiple teams ") 
 			   {
 			   id
 			   title
@@ -349,6 +431,8 @@ func runExampleMutation() {
 			   updates
 			   timing
 			   date
+			   team
+			   daysOfWeek
 			}
 		 }
 		 
@@ -425,7 +509,6 @@ func main() {
 		}
 		json.NewEncoder(w).Encode(result)
 	})
-
 	// Connect to MongoDB
 	clientOptions := options.Client().ApplyURI("mongodb://localhost:27017")
 	client, err := mongo.Connect(context.Background(), clientOptions)
@@ -437,33 +520,59 @@ func main() {
 			log.Fatal(err)
 		}
 	}()
-
 	// Check the connection
 	err = client.Ping(context.Background(), nil)
 	if err != nil {
 		log.Fatal(err)
 	}
-
 	// Get a handle for your collection
 	collection := client.Database("myDatabase").Collection("myCollection")
 	// Insert the data into the collection
 	for _, record := range standupRecords {
-		doc := bson.M{
-			"id":           record.ID,
-			"title":        record.Title,
-			"date":         record.Date,
-			"timing":       record.Timing,
-			"participants": record.Participants,
-			"updates":      record.Updates,
-			"email":        record.Email,
+		// check if record already exists in the database
+		filter := bson.D{{Key: "id", Value: record.ID}}
+		existingRecord := collection.FindOne(context.Background(), filter)
+		if existingRecord.Err() != nil {
+			if existingRecord.Err() != mongo.ErrNoDocuments {
+				log.Fatal(existingRecord.Err())
+			}
+			doc := bson.M{
+				"id":           record.ID,
+				"title":        record.Title,
+				"date":         record.Date,
+				"timing":       record.Timing,
+				"participants": record.Participants,
+				"updates":      record.Updates,
+				"email":        record.Email,
+				"team":         record.Team,
+				"daydofweek":   record.DaysOfWeek,
+			}
+			_, err = collection.InsertOne(context.Background(), doc)
+			if err != nil {
+				log.Fatal(err)
+			}
 		}
-		_, err = collection.InsertOne(context.Background(), doc)
+		// Query the collection
+		cur, err := collection.Find(context.Background(), bson.D{})
 		if err != nil {
 			log.Fatal(err)
 		}
+		defer cur.Close(context.Background())
+		// Print the data
+		results := printData(collection)
+		fmt.Println(results)
+		// Run an example mutation
+		runExampleMutation()
+		// Start the HTTP server
+		fmt.Println("Server is running on port 8080")
+		if err := http.ListenAndServe(":8080", nil); err != nil {
+			log.Fatal(err)
+		}
 	}
+}
 
-	// Query the collection
+func printData(collection *mongo.Collection) []bson.M {
+	var results []bson.M
 	cur, err := collection.Find(context.Background(), bson.D{})
 	if err != nil {
 		log.Fatal(err)
@@ -475,15 +584,7 @@ func main() {
 		if err != nil {
 			log.Fatal(err)
 		}
-		fmt.Println(result)
+		results = append(results, result)
 	}
-
-	// Run an example mutation
-	runExampleMutation()
-	fmt.Println("Data inserted successfully")
-	// Start the HTTP server
-	fmt.Println("Server is running on port 8080")
-	if err := http.ListenAndServe(":8080", nil); err != nil {
-		log.Fatal(err)
-	}
+	return results
 }

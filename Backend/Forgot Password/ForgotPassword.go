@@ -282,7 +282,7 @@ func main() {
 		Pretty:   true,
 		GraphiQL: true,
 	})
-	http.Handle("/graphql", withResponseWriter(h))
+	http.Handle("/forgotpassword", withResponseWriter(h))
 
 	// Start the server
 	log.Println("Listening on :8080...")

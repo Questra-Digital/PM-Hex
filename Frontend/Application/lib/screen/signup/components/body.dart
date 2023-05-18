@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:digital_scrum_assistant/components/socal_card.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:digital_scrum_assistant/constant.dart';
 import 'package:digital_scrum_assistant/size_config.dart';
 

@@ -1,6 +1,7 @@
+import 'package:digital_scrum_assistant/screen/About.dart';
+import 'package:digital_scrum_assistant/screen/ContactUsScreen.dart';
 import 'package:flutter/material.dart';
 import 'package:digital_scrum_assistant/screen/featureList/components/body.dart';
-import '../../../constant.dart';
 import '../../../size_config.dart';
 import 'home_header.dart';
 
@@ -55,7 +56,12 @@ class Body extends StatelessWidget {
                 SizedBox(width: getProportionateScreenWidth(10)),
                 ElevatedButton(
                   onPressed: () {
-                    // Handle Contact Us button press
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => ContactUsScreen(),
+                      ),
+                    );
                   },
                   child: Text(
                     'Contact Us',
@@ -69,7 +75,12 @@ class Body extends StatelessWidget {
                 SizedBox(width: getProportionateScreenWidth(10)),
                 ElevatedButton(
                   onPressed: () {
-                    // Handle About button press
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const AboutScreen(),
+                      ),
+                    );
                   },
                   child: Text(
                     'About',
@@ -102,7 +113,12 @@ class Body extends StatelessWidget {
             // CTA (Call-to-Action) Button
             ElevatedButton(
               onPressed: () {
-                // Handle CTA button press
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => FeaturePlayListScreen(),
+                  ),
+                );
               },
               child: Text(
                 'Get Started',

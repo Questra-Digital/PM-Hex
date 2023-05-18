@@ -3,15 +3,34 @@ import 'package:digital_scrum_assistant/components/custom_icon.dart';
 import 'package:digital_scrum_assistant/components/default_button.dart';
 import 'package:digital_scrum_assistant/components/form_error.dart';
 import 'package:digital_scrum_assistant/screen/complete_profile/complete_profile.dart';
-
+import 'package:http/http.dart' as http;
+import 'package:graphql_flutter/graphql_flutter.dart';
+import 'dart:convert';
 import '../../../constant.dart';
 import '../../../size_config.dart';
 
+final HttpLink httpLink = HttpLink('http://localhost:8080/signup');
+
+final ValueNotifier<GraphQLClient> client = ValueNotifier<GraphQLClient>(
+  GraphQLClient(
+    cache: GraphQLCache(),
+    link: httpLink,
+  ),
+);
+
+const String signUpMutation = r'''
+  mutation SignUp($email: String!, $password: String!) {
+    signUp(email: $email, password: $password) {
+      id
+      email
+    }
+  }
+''';
+
 class SignUpForm extends StatefulWidget {
-  const SignUpForm({super.key});
+  const SignUpForm({Key? key}) : super(key: key);
 
   @override
-  // ignore: library_private_types_in_public_api
   _SignUpFormState createState() => _SignUpFormState();
 }
 
@@ -19,12 +38,10 @@ class _SignUpFormState extends State<SignUpForm> {
   final _formKey = GlobalKey<FormState>();
   String? email;
   String? password;
-  // ignore: non_constant_identifier_names
-  String? conform_password;
-  bool remember = false;
-  final List<String?> errors = [];
+  String? confirmPassword;
+  final List<String> errors = [];
 
-  void addError({String? error}) {
+  void addError({required String error}) {
     if (!errors.contains(error)) {
       setState(() {
         errors.add(error);
@@ -32,11 +49,37 @@ class _SignUpFormState extends State<SignUpForm> {
     }
   }
 
-  void removeError({String? error}) {
+  void removeError({required String error}) {
     if (errors.contains(error)) {
       setState(() {
         errors.remove(error);
       });
+    }
+  }
+
+  Future<void> signUp(
+      String email, String password, String confirmPassword) async {
+    final url = Uri.parse('http://localhost:8080/signup');
+
+    final body = jsonEncode({
+      'user': {
+        'email': email,
+        'password': password,
+        'confirmpassword': confirmPassword,
+      },
+    });
+
+    final response = await http.post(url, body: body, headers: {
+      'Content-Type': 'application/json',
+    });
+
+    if (response.statusCode == 200) {
+      // Signup successful
+      final responseData = jsonDecode(response.body);
+      print('Signup successful. User ID: ${responseData['id']}');
+    } else {
+      // Signup failed
+      print('Signup failed. Error: ${response.body}');
     }
   }
 
@@ -50,41 +93,41 @@ class _SignUpFormState extends State<SignUpForm> {
           SizedBox(height: getProportionateScreenHeight(30)),
           buildPasswordFormField(),
           SizedBox(height: getProportionateScreenHeight(30)),
-          buildConformPassFormField(),
-          FormError(errors: errors),
+          buildConfirmPassFormField(),
           SizedBox(height: getProportionateScreenHeight(40)),
-          DefaultButton(
-            text: "Continue",
-            press: () {
+          ElevatedButton(
+            onPressed: () {
+              signUp('user@example.com', 'password', 'confirmPassword');
               if (_formKey.currentState!.validate()) {
                 _formKey.currentState!.save();
-                // if all are valid then go to success screen
+                // If all fields are valid, proceed to the next screen
                 Navigator.pushNamed(context, CompleteProfileScreen.routeName);
               }
             },
+            child: const Text("Continue"),
           ),
         ],
       ),
     );
   }
 
-  TextFormField buildConformPassFormField() {
+  TextFormField buildConfirmPassFormField() {
     return TextFormField(
       obscureText: true,
-      onSaved: (newValue) => conform_password = newValue,
+      onSaved: (newValue) => confirmPassword = newValue,
       onChanged: (value) {
         if (value.isNotEmpty) {
           removeError(error: kPassNullError);
-        } else if (value.isNotEmpty && password == conform_password) {
+        } else if (value == password) {
           removeError(error: kMatchPassError);
         }
-        conform_password = value;
+        confirmPassword = value;
       },
       validator: (value) {
         if (value!.isEmpty) {
           addError(error: kPassNullError);
           return "";
-        } else if ((password != value)) {
+        } else if (value != password) {
           addError(error: kMatchPassError);
           return "";
         }
@@ -93,10 +136,8 @@ class _SignUpFormState extends State<SignUpForm> {
       decoration: const InputDecoration(
         labelText: "Confirm Password",
         hintText: "Re-enter your password",
-        // If  you are using latest version of flutter then lable text and hint text shown like this
-        // if you r using flutter less then 1.20.* then maybe this is not working properly
         floatingLabelBehavior: FloatingLabelBehavior.always,
-        suffixIcon: CustomSurffixIcon(svgIcon: "assets/icons/Lock.svg"),
+        suffixIcon: Icon(Icons.lock),
       ),
     );
   }
@@ -126,10 +167,8 @@ class _SignUpFormState extends State<SignUpForm> {
       decoration: const InputDecoration(
         labelText: "Password",
         hintText: "Enter your password",
-        // If  you are using latest version of flutter then lable text and hint text shown like this
-        // if you r using flutter less then 1.20.* then maybe this is not working properly
         floatingLabelBehavior: FloatingLabelBehavior.always,
-        suffixIcon: CustomSurffixIcon(svgIcon: "assets/icons/Lock.svg"),
+        suffixIcon: Icon(Icons.lock),
       ),
     );
   }
@@ -159,10 +198,8 @@ class _SignUpFormState extends State<SignUpForm> {
       decoration: const InputDecoration(
         labelText: "Email",
         hintText: "Enter your email",
-        // If  you are using latest version of flutter then lable text and hint text shown like this
-        // if you r using flutter less then 1.20.* then maybe this is not working properly
         floatingLabelBehavior: FloatingLabelBehavior.always,
-        suffixIcon: CustomSurffixIcon(svgIcon: "assets/icons/Mail.svg"),
+        suffixIcon: Icon(Icons.mail),
       ),
     );
   }

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class StandupRecordForm extends StatefulWidget {
   const StandupRecordForm({Key? key}) : super(key: key);
@@ -14,6 +15,36 @@ class _StandupRecordFormState extends State<StandupRecordForm> {
   String _updates = '';
   String _email = '';
   List<String> _daysOfWeek = [];
+
+  void _submitForm() async {
+    if (_formKey.currentState!.validate()) {
+      _formKey.currentState!.save();
+
+      String subject = 'Meeting Details: $_title';
+      String body = 'Title: $_title\n'
+          'Participants: $_participants\n'
+          'Updates: $_updates\n'
+          'Days of Week: ${_daysOfWeek.join(", ")}';
+
+      final Uri _emailLaunchUri = Uri(
+        scheme: 'mailto',
+        path: _participants, // Use the participants' email addresses here
+        queryParameters: {
+          'subject': subject,
+          'body': body,
+        },
+      );
+
+      String emailUri = _emailLaunchUri.toString();
+      if (await canLaunch(emailUri)) {
+        await launch(emailUri);
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to send email')),
+        );
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -184,14 +215,5 @@ class _StandupRecordFormState extends State<StandupRecordForm> {
         });
       },
     );
-  }
-
-  void _submitForm() {
-// TODO: Implement submitting form data
-    print('Title: $_title');
-    print('Participants: $_participants');
-    print('Updates: $_updates');
-    print('Email: $_email');
-    print('Days of Week: $_daysOfWeek');
   }
 }
